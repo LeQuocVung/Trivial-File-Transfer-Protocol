@@ -27,14 +27,30 @@ typedef enum {
     ERR_NO_SUCH_USER = 7
 } err_code_t;
 
-const char* strerro(err_code_t err_code);
-int build_rq(char *buf, opcode_t op, const char *fn, const char *mode);
-int build_data(char *buf, uint16_t block_num, const char *data, int data_len);
-int build_ack(char *buf, uint16_t block_num);
-int build_err(char *buf, err_code_t err_code, const char *err_msg);
+int build_rq(char *buf, int buf_size, opcode_t op, const char *fn, const char *mode);
+
+int build_data(char *buf, int buf_size, uint16_t block_num, const char *data, int data_len);
+
+int build_ack(char *buf, int buf_size, uint16_t block_num);
+
+int build_err(char *buf, int buf_size, err_code_t err_code, const char *err_msg);
 
 int parse_rq(const char *buf, int len, char *fn, int fn_len, char *mode, int mode_len);
 
-void send_err(int sockfd, struct sockaddr_in *dst, socklen_t addr_len, err_code_t err_code, const char *custom_msg);
+int parse_ack(const char *buf, int len, uint16_t *block_num);
+
+int parse_data(const char *buf, int len, uint16_t *block_num, const char **data_ptr, int *data_len);
+
+int parse_err(const char *buf, int len, uint16_t *err_code, const char **err_msg);
+
+int send_rq(int sockfd, struct sockaddr_in *dst, socklen_t len, opcode_t op, const char *fn, const char *mode);
+
+int send_ack(int sockfd, struct sockaddr_in *dst, socklen_t len, uint16_t block_num);
+
+int send_data(int sockfd, struct sockaddr_in *dst, socklen_t len, uint16_t block_num, const char *data, int data_len);
+
+int send_err(int sockfd, struct sockaddr_in *dst, socklen_t addr_len, err_code_t err_code, const char *custom_msg);
+
+const char *strerro(err_code_t err_code);
 
 #endif
