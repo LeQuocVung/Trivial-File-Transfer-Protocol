@@ -63,14 +63,15 @@ int build_err(char *buf, int buf_size, err_code_t err_code, const char *err_msg)
     uint16_t opcode = htons((uint16_t)OP_ERROR);
     uint16_t errorcode = htons((uint16_t)err_code);
     int msg_len = strlen(err_msg);
+    if(buf_size < (2 + 2 + msg_len)) return -1;
     memcpy(buf, &opcode, 2);
-    memcpy(buf + 2, &err_code, 2);
+    memcpy(buf + 2, &errorcode, 2);
     memcpy(buf + 4, err_msg, msg_len + 1);
     return 2 + 2 + msg_len + 1;
 }
 
 int parse_rq(const char *buf, int len, char *fn, int fn_len, char *mode, int mode_len){
-    if(!buf || !fn || mode) return -1;
+    if(!buf || !fn || !mode) return -1;
     if(len < 6 || fn_len <= 0 || mode_len <= 0) return -1;
     uint16_t raw_code;
     memcpy(&raw_code, buf, 2);
