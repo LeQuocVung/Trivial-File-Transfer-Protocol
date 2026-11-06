@@ -11,6 +11,8 @@
 #include<stdint.h>
 #include<netdb.h>
 
+struct timeval tv;
+
 static int get_opcode(uint16_t *opcode, char *buf, int buf_size){
     if(buf_size < 2) return -1;
     if(!buf) return -1;
@@ -27,6 +29,9 @@ int main(int argc, char *argv[]){
     }
     else{
         int client = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        tv.tv_sec = 3;
+        tv.tv_usec = 0;
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char)&tv, sizeof(tv));
         if(client != -1){
             struct sockaddr_in saddr;
             saddr.sin_family = AF_INET;
@@ -40,51 +45,91 @@ int main(int argc, char *argv[]){
                 fflush(stdout);
                 scanf("%d",&n);
                 int chr;
-                while((chr = getchar()) != '\n' && chr != EOF);
-                printf("Enter filename:");
-                fflush(stdout);
-                fgets(filename, sizeof(filename) - 1, stdin);
-                filename[strcspn(filename, "\r\n")] = '\0';
                 if(n == 0){
                     break;
                 }
                 else if(n == 1){
+                    while((chr = getchar()) != '\n' && chr != EOF);
+                    printf("Enter filename:");
+                    fflush(stdout);
+                    fgets(filename, sizeof(filename) - 1, stdin);
+                    filename[strcspn(filename, "\r\n")] = '\0';
                     int sent = send_rq(client, &saddr, sizeof(saddr), OP_RRQ, filename, BIN_MODE);
                     if(sent < 0){
                         printf("Send failed\n");
                         break;
                     }
                     char buf[1024];
-                    char parse_buf[1024];
                     memset(buf, 0, sizeof(buf));
                     struct sockaddr_in tmp_addr;
                     int len = sizeof(struct sockaddr);
-                    while(1){
-                        int got = recvfrom(client, buf, sizeof(buf) - 1, 0, (struct sockaddr*)&tmp_addr, &len);
-                        if(got < 0){
-                            printf("recv fail");
-                            break;
-                        }
-                        uint16_t opcode;
-                        int ec = get_opcode(&opcode, buf, got);
-                        if(ec < 0){
-                            printf("get OPCODE failed\n");
-                            break;
-                        }
-                        uint16_t blocknums;
-                        if(opcode == OP_ACK){
-                            int ecc = parse_ack(buf, got, &blocknums);
-                            if(ecc < 0){
-                                printf("PARSE ERROR\n");
+                    uint16_t blocknums;
+                    uint16_t next_blocknums = 1;
+                    const char *data_ptr;
+                    const char *msg_ptr;
+                    int data_len;
+                    uint16_t errcode;
+                    FILE *f = fopen(filename, "wb+");
+                    if(!f){
+                        printf("Can't open file: %s\n", filename);
+                    }
+                    else{
+                        while(1){
+                            int got = recvfrom(client, buf, sizeof(buf) - 1, 0, (struct sockaddr*)&tmp_addr, &len);
+                            if(got < 0){
+                                printf("recv fail");
                                 break;
                             }
-                            printf("%d\n", blocknums);
-                            break;
+                            uint16_t opcode;
+                            int ec = get_opcode(&opcode, buf, got);
+                            if(ec < 0){
+                                printf("get OPCODE failed\n");
+                                break;
+                            }
+                            if(opcode == OP_DATA){
+                                int ecc = parse_data(buf, got, &blocknums, &data_ptr, &data_len);
+                                if(ecc < 0){
+                                    printf("PARSE ERROR\n");
+                                    break;
+                                }
+                                printf("current block nums: %d\n", blocknums);
+                                printf("size of current data package: %d\n", data_len);
+                                if(blocknums ==  next_blocknums){
+                                    if(data_len > 0){
+                                        fwrite(data_ptr, sizeof(char), data_len, f);       
+                                    }
+                                    send_ack(client, &tmp_addr, sizeof(tmp_addr), blocknums);
+                                    next_blocknums++;
+                                    if(data_len < 512) break;
+                                }
+                                else if(blocknums == next_blocknums - 1){
+                                    send_ack(client, &tmp_addr, sizeof(tmp_addr), blocknums);
+                                }
+                            }
+                            else if(opcode == OP_ERROR){
+                                int ecc = parse_err(buf, got, &errcode, &msg_ptr);
+                                if(ecc < 0){
+                                    printf("PARSE ERROR FAIL\n");
+                                }
+                                else{
+                                    printf("ERROR: [%d] : [%s]\n", errcode, msg_ptr);
+                                }
+                                break;
+                            }
+                            else{
+                                printf("UNDEFINED ERROR\n");
+                                break;
+                            }
                         }
+                        fclose(f);
                     }
                 }
                 else if(n == 2){
-                    printf("choose 2\n");
+                    while((chr = getchar()) != '\n' && chr != EOF);
+                    printf("Enter filename:");
+                    fflush(stdout);
+                    fgets(filename, sizeof(filename) - 1, stdin);
+                    filename[strcspn(filename, "\r\n")] = '\0';
                 }
                 else{
                     printf("ERROR\n");
