@@ -12,4 +12,5 @@
 #define BIN_MODE "octet"
 #define TXT_MODE "netascii"
 
+#define MAX_RETRIES 5
 #endif

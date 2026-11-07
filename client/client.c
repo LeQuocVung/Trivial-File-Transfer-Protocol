@@ -7,6 +7,7 @@
 #include<sys/types.h>
 #include<sys/socket.h>
 #include<unistd.h>
+#include<errno.h>
 #include<stddef.h>
 #include<stdint.h>
 #include<netdb.h>
@@ -31,7 +32,7 @@ int main(int argc, char *argv[]){
         int client = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         tv.tv_sec = 3;
         tv.tv_usec = 0;
-        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char)&tv, sizeof(tv));
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
         if(client != -1){
             struct sockaddr_in saddr;
             saddr.sin_family = AF_INET;
@@ -56,7 +57,7 @@ int main(int argc, char *argv[]){
                     filename[strcspn(filename, "\r\n")] = '\0';
                     int sent = send_rq(client, &saddr, sizeof(saddr), OP_RRQ, filename, BIN_MODE);
                     if(sent < 0){
-                        printf("Send failed\n");
+                        printf("SEND FAIL\n");
                         break;
                     }
                     char buf[1024];
@@ -68,22 +69,40 @@ int main(int argc, char *argv[]){
                     const char *data_ptr;
                     const char *msg_ptr;
                     int data_len;
+                    int retry = 0;
+                    uint16_t opcode;
                     uint16_t errcode;
                     FILE *f = fopen(filename, "wb+");
                     if(!f){
-                        printf("Can't open file: %s\n", filename);
+                        printf("CAN'T OPEN FILE: %s\n", filename);
+                        break;
                     }
                     else{
                         while(1){
                             int got = recvfrom(client, buf, sizeof(buf) - 1, 0, (struct sockaddr*)&tmp_addr, &len);
                             if(got < 0){
-                                printf("recv fail");
-                                break;
+                                if(errno == EAGAIN || errno == EWOULDBLOCK ){
+                                    retry++;
+                                    if(retry >= MAX_RETRIES){
+                                        printf("SERVER NOT RESPONDING. CONNECTION FAIL\n");
+                                        break;
+                                    }
+                                    if(next_blocknums == 1){
+                                        send_rq(client, &saddr, sizeof(saddr), OP_RRQ, filename, BIN_MODE); 
+                                    }
+                                    else{
+                                        send_ack(client, &tmp_addr, sizeof(tmp_addr), next_blocknums -1);
+                                    }
+                                    continue;
+                                }else{
+                                    printf("RECV FAIL\n");
+                                    break;
+                                }   
                             }
-                            uint16_t opcode;
+                            retry = 0;
                             int ec = get_opcode(&opcode, buf, got);
                             if(ec < 0){
-                                printf("get OPCODE failed\n");
+                                printf("GET OPCODE FAIL\n");
                                 break;
                             }
                             if(opcode == OP_DATA){
@@ -130,6 +149,99 @@ int main(int argc, char *argv[]){
                     fflush(stdout);
                     fgets(filename, sizeof(filename) - 1, stdin);
                     filename[strcspn(filename, "\r\n")] = '\0';
+                    int sent = send_rq(client, &saddr, sizeof(saddr), OP_WRQ, filename, BIN_MODE);
+                    if(sent < 0){
+                        printf("SEND REQUEST FAILED\n");
+                        break;
+                    }
+
+
+                    char buf[1024];
+                    memset(buf, 0, sizeof(buf));
+                    struct sockaddr_in tmp_addr;
+                    int len = sizeof(tmp_addr);
+                    int retry = 0;
+                    uint16_t opcode;
+                    uint16_t block_num;
+                    uint16_t error_code;
+                    const char *error_msg;
+                    uint16_t next_block_num = 0;
+                    char buffer[512];
+                    int bytes_read = 0;
+                    int is_the_last_pkt = 0;
+                    memset(buffer, 0, sizeof(buffer));
+                    FILE *f = fopen(filename, "rb");
+                    if(!f){
+                        printf("Can't open File: %s\n", filename);
+                    }
+                    else{
+                        while(1){
+                            int got = recvfrom(client, buf, sizeof(buf)-1, 0, (struct sockaddr*)&tmp_addr, &len);
+                            if(got < 0){
+                                if(errno == EAGAIN || errno == EWOULDBLOCK){
+                                    retry++;
+                                    if(retry >= MAX_RETRIES){
+                                        printf("SERVER NOT RESPONDING. CONNECTION LOST!\n");
+                                        break;
+                                    }
+                                    if(next_block_num == 0){
+                                        send_rq(client, &saddr, sizeof(saddr), OP_WRQ, filename, BIN_MODE);
+                                    }
+                                    else{
+                                        send_data(client, &tmp_addr, sizeof(tmp_addr), next_block_num, buffer, bytes_read);
+                                    }
+                                    continue;
+                                }
+                                else{
+                                    printf("RECV FAILD\n");
+                                    break;
+                                }
+                            }
+                            retry = 0;
+
+                            int ec = get_opcode(&opcode, buf, got);
+                            if(ec < 0){
+                                printf("GET OPCODE FAIL\n");
+                                break;
+                            }
+                            else{
+                                if(opcode == OP_ACK){
+                                    int ecc = parse_ack(buf, got, &block_num);
+                                    if(ecc < 0){
+                                        printf("PARSE ACK ERROR\n");
+                                        break;
+                                    }
+                                    if(block_num == next_block_num){
+                                        if(is_the_last_pkt){
+                                            printf("Upload file completed\n");
+                                            break;
+                                        }
+                                        bytes_read = fread(buffer, 1, 512, f);
+                                        next_block_num = block_num+1;
+                                        if(bytes_read < 512){
+                                            is_the_last_pkt = 1;
+                                        }
+                                        send_data(client, &tmp_addr, sizeof(tmp_addr), next_block_num, buffer, bytes_read);
+                                    }
+                                }
+                                else if(ec == OP_ERROR){
+                                    int ecc = parse_err(buf, got, &error_code, &error_msg);
+                                    if(ecc < 0){
+                                        printf("PARSE ERROR FAIL\n");
+                                    }
+                                    else{
+                                        printf("ERROR: [%d]: %s\n",error_code, error_msg);
+                                    }
+                                    break;
+                                }
+                                else{
+                                    printf("UNDEFINED ERROR\n");
+                                    break;
+                                }
+                            }
+                        }
+                        fclose(f);
+                    }
                 }
                 else{
                     printf("ERROR\n");
