@@ -13,7 +13,7 @@
 #include<netdb.h>
 
 struct timeval tv;
-
+char filepath[1024];
 static int get_opcode(uint16_t *opcode, char *buf, int buf_size){
     if(buf_size < 2) return -1;
     if(!buf) return -1;
@@ -72,7 +72,8 @@ int main(int argc, char *argv[]){
                     int retry = 0;
                     uint16_t opcode;
                     uint16_t errcode;
-                    FILE *f = fopen(filename, "wb+");
+                    snprintf(filepath, sizeof(filepath), "client/clientstorage/%s", filename);
+                    FILE *f = fopen(filepath, "wb+");
                     if(!f){
                         printf("CAN'T OPEN FILE: %s\n", filename);
                         break;
@@ -154,8 +155,6 @@ int main(int argc, char *argv[]){
                         printf("SEND REQUEST FAILED\n");
                         break;
                     }
-
-
                     char buf[1024];
                     memset(buf, 0, sizeof(buf));
                     struct sockaddr_in tmp_addr;
@@ -170,7 +169,8 @@ int main(int argc, char *argv[]){
                     int bytes_read = 0;
                     int is_the_last_pkt = 0;
                     memset(buffer, 0, sizeof(buffer));
-                    FILE *f = fopen(filename, "rb");
+                    snprintf(filepath, sizeof(filepath), "client/clientstorage/%s", filename);
+                    FILE *f = fopen(filepath, "rb");
                     if(!f){
                         printf("Can't open File: %s\n", filename);
                     }

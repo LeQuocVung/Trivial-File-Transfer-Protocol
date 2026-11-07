@@ -63,10 +63,12 @@ void *handle_client(void *arg){
                 send_err(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "MALFORMED RRQ PACKET\n");
             }
             else{
+                char filepath[1024];
+                snprintf(filepath, sizeof(filepath), "server/serverstorage/%s", filename);
                 pthread_mutex_lock(&lock);
                 printf("\n[SERVER] RRQ: file '%s' from %s:%d\n",filename, inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
                 pthread_mutex_unlock(&lock);
-                FILE *f = fopen(filename, "rb");
+                FILE *f = fopen(filepath, "rb");
                 if(!f){
                     if(errno == ENOENT){
                         send_err(client_fd, &caddr, sizeof(caddr), ERR_FILE_NOT_FOUND, NULL);
@@ -165,7 +167,9 @@ void *handle_client(void *arg){
                 pthread_mutex_lock(&lock);
                 printf("\n[SERVER] WRQ '%s':'%d'\n",inet_ntoa(caddr.sin_addr), ntohs(caddr.sin_port));
                 pthread_mutex_unlock(&lock);
-                FILE *f = fopen(filename, "wb+");
+                char filepath[1024];
+                snprintf(filepath, sizeof(filepath), "server/serverstorage/%s", filename);
+                FILE *f = fopen(filepath, "wb+");
                 if(!f){
                     if(errno == EACCES){
                         send_err(client_fd, &caddr, sizeof(caddr), ERR_ACCESS_VIOLATION, NULL);

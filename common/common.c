@@ -82,7 +82,7 @@ int parse_rq(const char *buf, int len, char *fn, int fn_len, char *mode, int mod
     memcpy(fn, buf + 2, f_len + 1);
     int offset = 2 + f_len + 1;
     int m_len = strnlen(buf + offset, len - offset);
-    if ((offset + m_len >= len) || (m_len >= mode_len)) return -1;
+    if ((m_len >= (len-offset)) || (m_len >= mode_len) || (m_len == 0)) return -1;
     memcpy(mode, buf + offset, m_len + 1);
     return 0;
 }
