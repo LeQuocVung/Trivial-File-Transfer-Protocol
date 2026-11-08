@@ -45,4 +45,4 @@ clean:
 		rm -f $(SERVER_BIN) $(CLIENT_BIN)
 		rm -f client/test_cli
 
-.PHONY: all dirs clean
+.PHONY: all dirs clean install uninstall
