@@ -63,6 +63,14 @@ void *handle_client(void *arg){
                 send_err(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "MALFORMED RRQ PACKET\n");
             }
             else{
+                if (strstr(filename, "..") != NULL || filename[0] == '/') {
+                    send_error(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: Invalid path");
+                    return;
+                }
+                if (strcmp(filename, "log.txt") == 0) {
+                    send_error(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: File log is protected");
+                    return;
+                }
                 char filepath[1024];
                 snprintf(filepath, sizeof(filepath), "server/serverstorage/%s", filename);
                 pthread_mutex_lock(&lock);

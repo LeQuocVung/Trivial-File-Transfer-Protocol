@@ -3,3 +3,4 @@ test_cli.c
 client/test_cli
 client/client
 server/server
+tftp-server.service
