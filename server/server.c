@@ -64,12 +64,12 @@ void *handle_client(void *arg){
             }
             else{
                 if (strstr(filename, "..") != NULL || filename[0] == '/') {
-                    send_error(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: Invalid path");
-                    return;
+                    send_err(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: Invalid path");
+                    pthread_exit(NULL);
                 }
                 if (strcmp(filename, "log.txt") == 0) {
-                    send_error(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: File log is protected");
-                    return;
+                    send_err(client_fd, &caddr, sizeof(caddr), ERR_ILLEGAL_OPERATION, "Access violation: File log is protected");
+                    pthread_exit(NULL);
                 }
                 char filepath[1024];
                 snprintf(filepath, sizeof(filepath), "server/serverstorage/%s", filename);
